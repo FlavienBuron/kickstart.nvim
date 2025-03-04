@@ -14,12 +14,16 @@ return {
     -- Creates a beautiful debugger UI
     'rcarriga/nvim-dap-ui',
 
+    -- Required dependency for nvim-dap-ui
+    'nvim-neotest/nvim-nio',
+
     -- Installs the debug adapters for you
     'williamboman/mason.nvim',
     'jay-babu/mason-nvim-dap.nvim',
 
     -- Add your own debuggers here
     'leoluz/nvim-dap-go',
+    'mfussenegger/nvim-dap-python',
   },
   config = function()
     local dap = require 'dap'
@@ -28,17 +32,48 @@ return {
     require('mason-nvim-dap').setup {
       -- Makes a best effort to setup the various debuggers with
       -- reasonable debug configurations
-      automatic_setup = true,
+      automatic_installation = true,
 
       -- You can provide additional configuration to the handlers,
       -- see mason-nvim-dap README for more information
-      handlers = {},
+      handlers = {
+        function()
+          require('dap-python').setup()
+          table.insert(require('dap').configurations.python, {
+            name = 'Pytest: Current File',
+            type = 'python',
+            request = 'launch',
+            module = 'pytest',
+            args = {
+              '${file}',
+              '-sv',
+              '--log-cli-level=INFO',
+              '--log-file=test_out.log',
+            },
+            console = 'integratedTerminal',
+          })
+          table.insert(require('dap').configurations.python, {
+            name = 'Profile python: Current File',
+            type = 'python',
+            request = 'launch',
+            module = 'cProfile',
+            args = {
+              '-o',
+              '/tmp/profile.dat',
+              '${file}',
+            },
+            console = 'integratedTerminal',
+          })
+        end,
+      },
 
       -- You'll need to check that you have the required things installed
       -- online, please don't ask me how to install them :)
       ensure_installed = {
         -- Update this to ensure that you have the debuggers for the langs you want
         'delve',
+        'python',
+        'codelldb',
       },
     }
 
@@ -74,6 +109,13 @@ return {
       },
     }
 
+    vim.api.nvim_set_hl(0, 'blue', { fg = '#3d59a1', bg = '#FFFF00' })
+    vim.api.nvim_set_hl(0, 'green', { fg = '#9ece6a', bg = '#FFFF00' })
+    vim.api.nvim_set_hl(0, 'yellow', { fg = '#FAFA33', bg = '#FFFa05' })
+    vim.api.nvim_set_hl(0, 'black', { fg = '#000000', bg = '#FFFF00' })
+    vim.fn.sign_define('DapBreakpoint', { text = '🐞', texthl = 'blue', linehl = 'black', numhl = 'yellow' })
+    vim.fn.sign_define('DapStopped', { text = '', texthl = 'green', linehl = 'black', numhl = 'yellow' })
+
     -- Toggle to see last session result. Without this, you can't see session output in case of unhandled exception.
     vim.keymap.set('n', '<F7>', dapui.toggle, { desc = 'Debug: See last session result.' })
 
@@ -82,6 +124,116 @@ return {
     dap.listeners.before.event_exited['dapui_config'] = dapui.close
 
     -- Install golang specific config
-    require('dap-go').setup()
+    require('dap-go').setup {
+      delve = {
+        -- On Windows delve must be run attached or it crashes.
+        -- See https://github.com/leoluz/nvim-dap-go/blob/main/README.md#configuring
+        detached = vim.fn.has 'win32' == 0,
+      },
+    }
+
+    dap.adapters.codelldb = {
+      type = 'server',
+      port = '${port}',
+      executable = {
+        command = '/home/flavien/.local/extension/adapter/codelldb',
+        args = { '--port', '${port}' },
+      },
+    }
+
+    -- dap.adapters.codelldb = function(on_adapter)
+    --   -- This asks the system for a free port
+    --   local tcp = vim.loop.new_tcp()
+    --   tcp:bind('127.0.0.1', 0)
+    --   local port = tcp:getsockname().port
+    --   tcp:shutdown()
+    --   tcp:close()
+    --
+    --   -- Start codelldb with the port
+    --   local stdout = vim.loop.new_pipe(false)
+    --   local stderr = vim.loop.new_pipe(false)
+    --   local opts = {
+    --     stdio = { nil, stdout, stderr },
+    --     args = { '--port', tostring(port) },
+    --   }
+    --   local handle
+    --   local pid_or_err
+    --   handle, pid_or_err = vim.loop.spawn('/usr/bin/codelldb', opts, function(code)
+    --     stdout:close()
+    --     stderr:close()
+    --     handle:close()
+    --     if code ~= 0 then
+    --       print('codelldb exited with code', code)
+    --     end
+    --   end)
+    --   if not handle then
+    --     vim.notify('Error running codelldb: ' .. tostring(pid_or_err), vim.log.levels.ERROR)
+    --     stdout:close()
+    --     stderr:close()
+    --     return
+    --   end
+    --   vim.notify('codelldb started. pid=' .. pid_or_err)
+    --   stderr:read_start(function(err, chunk)
+    --     assert(not err, err)
+    --     if chunk then
+    --       vim.schedule(function()
+    --         require('dap.repl').append(chunk)
+    --       end)
+    --     end
+    --   end)
+    --   local adapter = {
+    --     type = 'server',
+    --     host = '127.0.0.1',
+    --     port = port,
+    --   }
+    --   -- 💀
+    --   -- Wait for codelldb to get ready and start listening before telling nvim-dap to connect
+    --   -- If you get connect errors, try to increase 500 to a higher value, or check the stderr (Open the REPL)
+    --   vim.defer_fn(function()
+    --     on_adapter(adapter)
+    --   end, 1000)
+    -- end
+    --
+    -- -- don't forget to compile/build with debug symbols, otherwise it won't work.
+    -- dap.configurations.cpp = {
+    --   {
+    --     name = 'runit',
+    --     type = 'codelldb',
+    --     request = 'launch',
+    --
+    --     program = function()
+    --       return vim.fn.input('', vim.fn.getcwd(), 'file')
+    --     end,
+    --
+    --     args = { '--log_level=all' },
+    --     cwd = '${workspaceFolder}',
+    --     stopOnEntry = false,
+    --     terminal = 'integrated',
+    --
+    --     pid = function()
+    --       local handle = io.popen 'pgrep hw$'
+    --       local result = handle:read()
+    --       handle:close()
+    --       return result
+    --     end,
+    --   },
+    -- }
+    --
+    -- dap.configurations.c = dap.configurations.cpp
+    -- dap.configurations.h = dap.configurations.cpp
+    -- dap.configurations.rust = dap.configurations.cpp
+
+    dap.configurations.cpp = {
+      {
+        name = 'Launch file',
+        type = 'codelldb',
+        request = 'launch',
+        program = function()
+          return vim.fn.input('Path to executable: ', vim.fn.getcwd() .. '/', 'file')
+        end,
+        cwd = '${workspaceFolder}',
+        stopOnEntry = false,
+      },
+    }
   end,
 }
