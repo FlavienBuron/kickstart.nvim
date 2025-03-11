@@ -36,6 +36,10 @@ return {
           highlight = 'NeoTreeIndentMarker',
         },
       },
+      source = {
+        'filesystem',
+        'netman.ui.neo-tree',
+      },
     }
   end,
 }
