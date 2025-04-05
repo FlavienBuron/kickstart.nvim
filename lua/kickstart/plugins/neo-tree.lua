@@ -38,7 +38,11 @@ return {
       },
       source = {
         'filesystem',
-        'netman.ui.neo-tree',
+      },
+      source_selector = {
+        sources = {
+          { source = 'remote' },
+        },
       },
     }
   end,
