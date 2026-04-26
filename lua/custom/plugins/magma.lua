@@ -1,6 +1,7 @@
 return {
-	{
-		'dccsillag/magma-nvim',
-		-- run = 'UpdateRemotePlugins',
-	},
+  {
+    'dccsillag/magma-nvim',
+    enabled = false,
+    -- run = 'UpdateRemotePlugins',
+  },
 }

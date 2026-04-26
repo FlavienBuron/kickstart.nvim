@@ -12,12 +12,12 @@ keymap.set('n', '<leader>sE', '<C-w>=') -- make split windows equal width / heig
 keymap.set('n', '<leader>sQ', '<C-w>q') -- close current split window
 
 -- Tabs
-keymap.set('n', '<leader>to', ':tabnew<CR>')   -- open new tab
+keymap.set('n', '<leader>to', ':tabnew<CR>') -- open new tab
 keymap.set('n', '<leader>tx', ':tabclose<CR>') -- close current tab
-keymap.set('n', '<leader>tn', ':tabn<CR>')     -- go to next tab
-keymap.set('n', '<leader>tp', ':tabp<CR>')     -- go to previous tab
+keymap.set('n', '<leader>tn', ':tabn<CR>') -- go to next tab
+keymap.set('n', '<leader>tp', ':tabp<CR>') -- go to previous tab
 
-keymap.set('n', 'x', '_x')                     -- delete character instead of cut to reg
+keymap.set('n', 'x', '_x') -- delete character instead of cut to reg
 
 -- Telescope keybind
 keymap.set('n', '<leader>ff', '<cmd>Telescope find_files<cr>')
@@ -41,3 +41,7 @@ keymap.set('n', '<leader>mx', '<cmd>MagmaInterrupt<CR>')
 keymap.set('n', '<leader>mE', '<cmd>noautocmd MagmaEnterOutput<CR>')
 keymap.set('n', '<leader>mO', '<cmd>MagmaShowOutput<CR>')
 keymap.set('n', '<leader>md', '<cmd>MagmaDelete<CR>')
+
+vim.api.nvim_set_keymap('n', '<leader>ll', '<cmd>VimtexCompile<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('n', '<leader>lv', '<cmd>VimtexView<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('n', '<leader>le', '<cmd>VimtexErrors<CR>', { noremap = true, silent = true })

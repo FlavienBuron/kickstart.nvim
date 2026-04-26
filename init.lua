@@ -114,7 +114,8 @@ vim.api.nvim_create_autocmd('TextYankPost', {
   desc = 'Highlight when yanking (copying) text',
   group = vim.api.nvim_create_augroup('kickstart-highlight-yank', { clear = true }),
   callback = function()
-    vim.highlight.on_yank()
+    -- vim.highlight.on_yank()
+    vim.hl.on_yank()
   end,
 })
 
@@ -200,18 +201,33 @@ require('lazy').setup({
       require('which-key').setup()
 
       -- Document existing key chains
+      -- require('which-key').add {
+      --   ['<leader>c'] = { name = '[C]ode', _ = 'which_key_ignore' },
+      --   ['<leader>d'] = { name = '[D]ocument', _ = 'which_key_ignore' },
+      --   ['<leader>r'] = { name = '[R]ename', _ = 'which_key_ignore' },
+      --   ['<leader>s'] = { name = '[S]earch', _ = 'which_key_ignore' },
+      --   ['<leader>w'] = { name = '[W]orkspace', _ = 'which_key_ignore' },
+      --   ['<leader>t'] = { name = '[T]oggle', _ = 'which_key_ignore' },
+      --   ['<leader>h'] = { name = 'Git [H]unk', _ = 'which_key_ignore' },
+      -- }
+      -- -- visual mode
+      -- require('which-key').add({
+      --   ['<leader>h'] = { 'Git [H]unk' },
+      -- }, { mode = 'v' })
+      -- Document existing key chains (which-key v3+ API)
       require('which-key').add {
-        ['<leader>c'] = { name = '[C]ode', _ = 'which_key_ignore' },
-        ['<leader>d'] = { name = '[D]ocument', _ = 'which_key_ignore' },
-        ['<leader>r'] = { name = '[R]ename', _ = 'which_key_ignore' },
-        ['<leader>s'] = { name = '[S]earch', _ = 'which_key_ignore' },
-        ['<leader>w'] = { name = '[W]orkspace', _ = 'which_key_ignore' },
-        ['<leader>t'] = { name = '[T]oggle', _ = 'which_key_ignore' },
-        ['<leader>h'] = { name = 'Git [H]unk', _ = 'which_key_ignore' },
+        { '<leader>c', group = '[C]ode' },
+        { '<leader>d', group = '[D]ocument' },
+        { '<leader>r', group = '[R]ename' },
+        { '<leader>s', group = '[S]earch' },
+        { '<leader>w', group = '[W]orkspace' },
+        { '<leader>t', group = '[T]oggle' },
+        { '<leader>h', group = 'Git [H]unk' },
       }
-      -- visual mode
+
+      -- Visual mode mappings
       require('which-key').add({
-        ['<leader>h'] = { 'Git [H]unk' },
+        { '<leader>h', desc = 'Git [H]unk' },
       }, { mode = 'v' })
     end,
   },
@@ -512,7 +528,20 @@ require('lazy').setup({
       --  When you add nvim-cmp, luasnip, etc. Neovim now has *more* capabilities.
       --  So, we create new capabilities with nvim cmp, and then broadcast that to the servers.
       local capabilities = vim.lsp.protocol.make_client_capabilities()
-      capabilities = vim.tbl_deep_extend('force', capabilities, require('cmp_nvim_lsp').default_capabilities())
+      -- capabilities = vim.tbl_deep_extend('force', capabilities, require('cmp_nvim_lsp').default_capabilities())
+      -- -------------------------------------------------------------------------------------
+      -- Safely merge completion capabilities
+      local ok, cmp_lsp = pcall(require, 'cmp_nvim_lsp')
+      if ok and cmp_lsp and type(cmp_lsp.default_capabilities) == 'function' then
+        capabilities = vim.tbl_deep_extend('force', capabilities, cmp_lsp.default_capabilities() or {})
+      end
+
+      -- If you're using blink.cmp instead, uncomment this and comment the block above:
+      -- local blink_ok, blink = pcall(require, 'blink.cmp')
+      -- if blink_ok then
+      --   capabilities = vim.tbl_deep_extend('force', capabilities, blink.get_lsp_capabilities())
+      -- end
+      -- -----------------------------------------------------------------------------------
 
       -- Enable the following language servers
       --  Feel free to add/remove any LSPs that you want here. They will automatically be installed.
@@ -526,7 +555,7 @@ require('lazy').setup({
       local servers = {
         clangd = {},
         -- gopls = {},
-        pyright = { with = { extra_args = { '--line-length=180' } } },
+        pyright = { init_options = { formatting = { lineLength = 180 } } },
         rust_analyzer = {},
         jsonls = {},
         omnisharp = {},
@@ -564,6 +593,15 @@ require('lazy').setup({
         },
       }
 
+      -- Apply capabilities and register with new API
+      for server_name, server_config in pairs(servers) do
+        vim.lsp.config[server_name] = vim.tbl_deep_extend('force', {
+          capabilities = capabilities or {},
+        }, server_config or {})
+        -- Enable immediately, or defer until file type matches
+        vim.lsp.enable(server_name)
+      end
+
       -- Ensure the servers and tools above are installed
       --  To check the current status of installed tools and/or manually install
       --  other tools, you can run
@@ -585,12 +623,20 @@ require('lazy').setup({
         automatic_installation = false,
         handlers = {
           function(server_name)
-            local server = servers[server_name] or {}
-            -- This handles overriding only values explicitly passed
-            -- by the server configuration above. Useful when disabling
-            -- certain features of an LSP (for example, turning off formatting for tsserver)
-            server.capabilities = vim.tbl_deep_extend('force', {}, capabilities, server.capabilities or {})
-            require('lspconfig')[server_name].setup(server)
+            -- ### BEGIN OLD CODE ###
+            -- local server = servers[server_name] or {}
+            -- -- This handles overriding only values explicitly passed
+            -- -- by the server configuration above. Useful when disabling
+            -- -- certain features of an LSP (for example, turning off formatting for tsserver)
+            -- server.capabilities = vim.tbl_deep_extend('force', {}, capabilities, server.capabilities or {})
+            -- require('lspconfig')[server_name].setup(server)
+            -- ### END OLD CODE ###
+            -- If server wasn't manually configured above, enable with defaults
+            if not vim.lsp.config[server_name] then
+              vim.lsp.config[server_name] = { capabilities = capabilities }
+            end
+            -- Ensure it's enabled (mason-lspconfig calls this after install)
+            vim.lsp.enable(server_name)
           end,
         },
       }
@@ -598,17 +644,17 @@ require('lazy').setup({
       -- local lspconfig = require 'lspconfig'
       -- lspconfig['lua_ls'].setup { capabilities = blink_capabilities }
 
-      local mason_null_ls = require 'mason-null-ls'
-      local null_servers = {
-        prettier = {},
-        stylua = {},
-        fixjson = {},
-        ruff = {},
-      }
-      mason_null_ls.setup {
-        automatic_installation = true,
-        ensure_installed = vim.tbl_keys(null_servers),
-      }
+      -- local mason_null_ls = require 'mason-null-ls'
+      -- local null_servers = {
+      --   prettier = {},
+      --   stylua = {},
+      --   fixjson = {},
+      --   ruff = {},
+      -- }
+      -- mason_null_ls.setup {
+      --   automatic_installation = true,
+      --   ensure_installed = vim.tbl_keys(null_servers),
+      -- }
     end,
   },
 
@@ -639,11 +685,6 @@ require('lazy').setup({
         desc = '[F]ormat buffer',
       },
     },
-    formatters = {
-      ruff_format = {
-        append_args = { '--line-length', '180' },
-      },
-    },
     opts = {
       notify_on_error = false,
       format_on_save = function(bufnr)
@@ -666,10 +707,30 @@ require('lazy').setup({
         lua = { 'stylua' },
         -- Conform can also run multiple formatters sequentially
         python = { 'ruff_fix', 'ruff_format', 'ruff_organize_imports' },
-        --
-        -- You can use 'stop_after_first' to run the first available formatter from the list
-        -- javascript = { "prettierd", "prettier", stop_after_first = true },
+        json = { 'prettier' },
+        javascript = { 'prettier' },
+        typescript = { 'prettier' },
+        typescriptreact = { 'prettier' },
+        javascriptreact = { 'prettier' },
+        css = { 'prettier' },
+        html = { 'prettier' },
+        yaml = { 'prettier' },
+        markdown = { 'prettier' },
+        jq = { 'jq' },
       },
+      formatters = {
+        stylua = {
+          prepend_args = { '--column-width', '180' },
+        },
+        prettier = {
+          prepend_args = { '--print-width', '180' },
+        },
+        ruff_format = {
+          append_args = { '--line-length', '180' },
+        },
+        jq = {
+          prepend_args = { '--indent', '4' },
+        },},
     },
   },
   -------
@@ -941,7 +1002,12 @@ require('lazy').setup({
   },
 
   -- Highlight todo, notes, etc in comments
-  { 'folke/todo-comments.nvim', event = 'VimEnter', dependencies = { 'nvim-lua/plenary.nvim' }, opts = { signs = false } },
+  {
+    'folke/todo-comments.nvim',
+    event = 'VimEnter',
+    dependencies = { 'nvim-lua/plenary.nvim' },
+    opts = { signs = false },
+  },
 
   { -- Collection of various small independent plugins/modules
     'echasnovski/mini.nvim',
@@ -968,7 +1034,9 @@ require('lazy').setup({
       --  and try some other statusline plugin
       local statusline = require 'mini.statusline'
       -- set use_icons to true if you have a Nerd Font
-      statusline.setup { use_icons = vim.g.have_nerd_font }
+      statusline.setup {
+        use_icons = vim.g.have_nerd_font,
+      }
 
       -- You can configure sections in the statusline by overriding their
       -- default behavior. For example, here we set the section for
@@ -1020,10 +1088,14 @@ require('lazy').setup({
       indent = { enable = true, disable = { 'ruby' } },
     },
     config = function(_, opts)
-      -- [[ Configure Treesitter ]] See `:help nvim-treesitter`
-
+      local ts_install = require 'nvim-treesitter.install'
       -- Prefer git instead of curl in order to improve connectivity in some environments
-      require('nvim-treesitter.install').prefer_git = true
+      ts_install.prefer_git = true
+      -- Use prebuilt parsers to avoid tree-sitter CLI ABI issues
+      ts_install.compilers = { 'gcc', 'clang' }
+
+      require('nvim-treesitter.configs').setup(opts)
+
       --@diagnostic disable-next-line: missing-fields
       require('nvim-treesitter.configs').setup(opts)
 
@@ -1080,18 +1152,18 @@ require('lazy').setup({
   },
 })
 
-local capabilities = vim.lsp.protocol.make_client_capabilities()
-capabilities.textDocument.foldingRange = {
-  dynamicRegistration = false,
-  lineFoldingOnly = true,
-}
-local language_servers = require('lspconfig').util.available_servers() -- or list servers manually like {'gopls', 'clangd'}
-for _, ls in ipairs(language_servers) do
-  require('lspconfig')[ls].setup {
-    capabilities = capabilities,
-    -- you can add other fields for setting up lsp server in this table
-  }
-end
+-- local capabilities = vim.lsp.protocol.make_client_capabilities()
+-- capabilities.textDocument.foldingRange = {
+--   dynamicRegistration = false,
+--   lineFoldingOnly = true,
+-- }
+-- local language_servers = require('lspconfig').util.available_servers() -- or list servers manually like {'gopls', 'clangd'}
+-- for _, ls in ipairs(language_servers) do
+--   require('lspconfig')[ls].setup {
+--     capabilities = capabilities,
+--     -- you can add other fields for setting up lsp server in this table
+--   }
+-- end
 require('ufo').setup()
 -- The line beneath this is called `modeline`. See `:help modeline`
 -- vim: ts=2 sts=2 sw=2 et
@@ -1111,15 +1183,29 @@ require 'custom.core.colorscheme'
 require 'custom.core.keymaps'
 require 'custom.core.onedark-custom'
 -- vim.g.magma_automatically_open_output = vim.v.false
-vim.g.magma_image_provider = 'kitty'
+-- vim.g.magma_image_provider = 'kitty'
 
-local lspconf = require 'lspconfig'
-
-lspconf.pyright.setup {
+-- local lspconf = require 'lspconfig'
+--
+-- lspconf.pyright.setup {
+--   on_attach = function(client, bufnr)
+--     local venv = os.getenv 'VIRTUAL_ENV'
+--     if venv then
+--       client.config.settings.python.pythonPath = venv .. '/bin/python'
+--     end
+--   end,
+-- }
+-- ------------------------------------------
+-- ✅ NEW: Uses vim.lsp.config (Neovim 0.11+ native API)
+vim.lsp.config['pyright'] = {
   on_attach = function(client, bufnr)
     local venv = os.getenv 'VIRTUAL_ENV'
     if venv then
+      -- Safely ensure nested tables exist before assigning
+      client.config.settings = client.config.settings or {}
+      client.config.settings.python = client.config.settings.python or {}
       client.config.settings.python.pythonPath = venv .. '/bin/python'
     end
   end,
 }
+vim.lsp.enable 'pyright'
